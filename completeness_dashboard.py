@@ -204,14 +204,18 @@ def calculate_metrics(schema, table, columns, source_db=None):
             })
         return pd.DataFrame(results)
 
-# Styling function for conditional row background coloring based on completeness_%
-def style_completeness_row(row):
+# Styling function for conditional cell background coloring based on completeness_%
+def style_completeness_cell(row):
+    # Initialize empty styles for all columns
+    styles = [''] * len(row)
+    # Index of completeness_% column
+    completeness_idx = row.index.get_loc('completeness_%')
+    # Apply background color only to completeness_% cell
     if 80 <= row['completeness_%'] < 90:
-        return [f'background-color: orange' for _ in row]
+        styles[completeness_idx] = 'background-color: orange'
     elif row['completeness_%'] < 80:
-        return [f'background-color: red' for _ in row]
-    else:
-        return ['' for _ in row]  # No background color for values >= 90
+        styles[completeness_idx] = 'background-color: red'
+    return styles
 
 st.title("MFIS Data Quality Assessment")
 
@@ -235,8 +239,8 @@ if st.button("Submit"):
     level = f"{selected_source} (Source)" if source_db else f"{selected_mfi} (MFI Schema)"
     st.success(f"Metrics calculated for {selected_table} in {level}")
     
-    # Apply styling to the entire row and format completeness_% and integrity_% to 2 decimal places
-    styled_df = df.style.apply(style_completeness_row, axis=1).format(
+    # Apply styling to the completeness_% column and format completeness_% and integrity_% to 2 decimal places
+    styled_df = df.style.apply(style_completeness_cell, axis=1).format(
         {'completeness_%': '{:.2f}', 'integrity_%': lambda x: '{:.2f}'.format(x) if isinstance(x, (int, float)) else x}
     )
     st.dataframe(styled_df)
@@ -245,4 +249,3 @@ if st.button("Submit"):
     filename = f"{selected_source}_{selected_table}_metrics.csv" if source_db else f"{selected_mfi}_{selected_table}_metrics.csv"
     csv = df.to_csv(index=False)
     st.download_button(label="Download CSV", data=csv, file_name=filename, mime='text/csv')
-
