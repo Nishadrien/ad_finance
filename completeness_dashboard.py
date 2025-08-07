@@ -4,7 +4,6 @@ from sqlalchemy import create_engine
 from urllib.parse import quote_plus
 from sqlalchemy import text
 
-
 # DB connection info
 host = "35.177.7.188"
 port = 5432
@@ -34,7 +33,7 @@ table_columns = {
         "id_cpte", "id_titulaire", "date_ouvert", "etat_cpte", "solde",
         "mode_calcul_int_cpte", "interet_annuel", "devise", "mnt_bloq"
     ],
-     "ad_his": [
+    "ad_his": [
         "id_his", "type_fonction", "id_client", "login", "date", "id_his_ext"
     ],
     "ad_ecriture": [
@@ -56,7 +55,7 @@ table_columns = {
     ],
     "ad_calc_int_recevoir_his": [
          "id", "id_doss", "id_ech", "date_traitement", "nb_jours",
-    "montant", "etat_int", "cre_etat", "devise"
+         "montant", "etat_int", "cre_etat", "devise"
     ],
     "ad_provision": [
         "id_provision", "id_doss", "montant", "taux", "date_prov",
@@ -98,40 +97,29 @@ table_columns = {
     ]
 }
 
-unique_columns = {
-    "ad_cli": ["id_client", "id_cpte_base"],  # client ID and base account unique
-    "ad_cpt": ["id_cpte"],                    # account ID unique
-    "ad_his": ["id_his"],                     # transaction history ID unique
-    "ad_ecriture": ["id_ecriture"],           # accounting entry ID unique
-    "ad_mouvement": ["id_mouvement"],         # movement ID unique
-    "ad_dcr": ["id_doss"],                     # loan dossier ID unique
-    "ad_etr": ["id_ech"],                      # installment ID unique
-    "ad_sre": ["id_ech"],                      # installment ID unique (payment)
-    "ad_calc_int_recevoir_his": ["id"],       # interest received history ID unique
-    "ad_provision": ["id_provision"],          # provision ID unique
-    "ml_demande_credit": ["id_transaction"],  # transaction ID unique
-    "ad_abonnement": ["id_abonnement"],        # subscription ID unique
-    "ad_calc_int_paye_his": ["id"],            # interest payment history ID unique
-    "ad_cpt_comptable": ["num_cpte_comptable"],# accounting account number unique
-    "adsys_produit_credit": ["id"],             # credit product ID unique
-    "ad_gar": ["id_gar"],                        # guarantee ID unique
-    "ad_gui": ["id_gui"],                        # guichet ID unique
-    "adsys_detail_objet": ["id"],                # detail objet ID unique
-    "adsys_objets_credits": ["id"],              # objet credits ID unique
-    "ad_dcr_hist": ["id"],                        # loan credit history ID unique
-}
-
-
 def calculate_completeness(schema, table, columns):
     engine = create_engine(
         f"postgresql+psycopg2://{user}:{password_encoded}@{host}:{port}/{mfi_db}",
         connect_args={"options": f"-csearch_path={schema}"}
     )
     with engine.connect() as conn:
-        total_rows = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+        # Add condition for ad_cli to filter by statut_juridique = 1
+        if table == "ad_cli":
+            total_rows = conn.execute(text(f"SELECT COUNT(*) FROM {table} WHERE statut_juridique = 1")).scalar()
+        else:
+            total_rows = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+        
         results = []
         for col in columns:
-            non_null_count = conn.execute(text(f"SELECT COUNT({col}) FROM {table} WHERE {col} IS NOT NULL")).scalar()
+            # Apply the same filter for non-null counts when table is ad_cli
+            if table == "ad_cli":
+                non_null_count = conn.execute(
+                    text(f"SELECT COUNT({col}) FROM {table} WHERE {col} IS NOT NULL AND statut_juridique = 1")
+                ).scalar()
+            else:
+                non_null_count = conn.execute(
+                    text(f"SELECT COUNT({col}) FROM {table} WHERE {col} IS NOT NULL")
+                ).scalar()
             completeness_pct = (non_null_count / total_rows * 100) if total_rows > 0 else 0
             results.append({
                 "table": table,
@@ -140,7 +128,16 @@ def calculate_completeness(schema, table, columns):
             })
         return pd.DataFrame(results)
 
-st.title("MFIS Data Completeness")
+# Styling function for conditional row background coloring
+def style_completeness_row(row):
+    if 80 <= row['completeness_%'] < 90:
+        return [f'background-color: orange' for _ in row]
+    elif row['completeness_%'] < 80:
+        return [f'background-color: red' for _ in row]
+    else:
+        return ['' for _ in row]  # No background color for values >= 90
+
+st.title("AD Finance Data Completeness Dashboard")
 
 selected_mfi = st.selectbox("Select MFI Schema", mfis_schemas)
 selected_table = st.selectbox("Select Table", list(table_columns.keys()))
@@ -149,10 +146,10 @@ if st.button("Calculate Completeness"):
     with st.spinner("Calculating completeness..."):
         df = calculate_completeness(selected_mfi, selected_table, table_columns[selected_table])
     st.success(f"Completeness calculated for {selected_table} in {selected_mfi}")
-    st.dataframe(df)
+    
+    # Apply styling to the entire row and format completeness_% to 2 decimal places
+    styled_df = df.style.apply(style_completeness_row, axis=1).format({'completeness_%': '{:.2f}'})
+    st.dataframe(styled_df)
 
     csv = df.to_csv(index=False)
     st.download_button(label="Download CSV", data=csv, file_name=f"{selected_mfi}_{selected_table}_completeness.csv", mime='text/csv')
-
-
-
