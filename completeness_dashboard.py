@@ -34,6 +34,9 @@ table_columns = {
         "id_cpte", "id_titulaire", "date_ouvert", "etat_cpte", "solde",
         "mode_calcul_int_cpte", "interet_annuel", "devise", "mnt_bloq"
     ],
+     "ad_his": [
+        "id_his", "type_fonction", "id_client", "login", "date", "id_his_ext"
+    ],
     "ad_ecriture": [
         "id_ecriture", "id_his", "date_comptable", "type_operation", "ref_ecriture"
     ],
