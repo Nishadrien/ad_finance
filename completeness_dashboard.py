@@ -34,7 +34,7 @@ table_columns = {
         "mode_calcul_int_cpte", "interet_annuel", "devise", "mnt_bloq"
     ],
     "ad_his": [
-        "id_his", "id_client","type_fonction", "login", "date", "id_his_ext"
+        "id_his", "type_fonction", "id_client", "login", "date", "id_his_ext"
     ],
     "ad_ecriture": [
         "id_ecriture", "id_his", "date_comptable", "type_operation", "ref_ecriture"
@@ -93,11 +93,35 @@ table_columns = {
         "id", "libel", "code"
     ],
     "ad_dcr_hist": [
-        "id", "id_doss", "date_action", "etat", "cre_mnt_deb"
+        "id", "id_doss", "date_action", "etat", "cre_mnt_deb","id_client"
     ]
 }
 
-def calculate_completeness(schema, table, columns):
+# Columns to check for uniqueness (mapped to original column names)
+unique_columns = {
+    "ad_cli": ["id_client_unique"],
+    "ad_cpt": ["id_cpte_unique"],
+    "ad_his": ["id_his_unique"],
+    "ad_ecriture": ["id_ecriture_unique"],
+    "ad_mouvement": ["id_mouvement_unique"],
+    "ad_dcr": ["id_doss_unique"],
+    "ad_etr": ["id_ech_unique"],
+    "ad_sre": ["id_ech_unique"],
+    "ad_calc_int_recevoir_his": ["id_doss_unique"],
+    "ad_provision": ["id_provision_unique"],
+    "ml_demande_credit": ["id_transaction_unique"],
+    "ad_abonnement": ["id_abonnement_unique"],
+    "ad_calc_int_paye_his": ["id_unique"],
+    "ad_cpt_comptable": ["num_cpte_comptable_unique"],
+    "adsys_produit_credit": ["id_unique"],
+    "ad_gar": ["id_gar_unique"],
+    "ad_gui": ["id_gui_unique"],
+    "adsys_detail_objet": ["id_unique"],
+    "adsys_objets_credits": ["id_unique"],
+    "ad_dcr_hist": ["id_unique"],
+}
+
+def calculate_metrics(schema, table, columns):
     engine = create_engine(
         f"postgresql+psycopg2://{user}:{password_encoded}@{host}:{port}/{mfi_db}",
         connect_args={"options": f"-csearch_path={schema}"}
@@ -110,8 +134,13 @@ def calculate_completeness(schema, table, columns):
             total_rows = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
         
         results = []
+        # Get unique columns for the current table (if any)
+        table_unique_columns = unique_columns.get(table, [])
+        # Create a mapping from unique column names to original column names
+        unique_to_original = {col + "_unique": col for col in columns if col + "_unique" in table_unique_columns}
+        
         for col in columns:
-            # Apply the same filter for non-null counts when table is ad_cli
+            # Completeness calculation
             if table == "ad_cli":
                 non_null_count = conn.execute(
                     text(f"SELECT COUNT({col}) FROM {table} WHERE {col} IS NOT NULL AND statut_juridique = 1")
@@ -121,14 +150,31 @@ def calculate_completeness(schema, table, columns):
                     text(f"SELECT COUNT({col}) FROM {table} WHERE {col} IS NOT NULL")
                 ).scalar()
             completeness_pct = (non_null_count / total_rows * 100) if total_rows > 0 else 0
+            
+            # Integrity calculation
+            integrity_pct = "N/A"
+            unique_col = col + "_unique"
+            if unique_col in table_unique_columns:
+                if table == "ad_cli":
+                    distinct_count = conn.execute(
+                        text(f"SELECT COUNT(DISTINCT {unique_col}) FROM {table} WHERE {unique_col} IS NOT NULL AND statut_juridique = 1")
+                    ).scalar()
+                else:
+                    distinct_count = conn.execute(
+                        text(f"SELECT COUNT(DISTINCT {unique_col}) FROM {table} WHERE {unique_col} IS NOT NULL")
+                    ).scalar()
+                integrity_pct = (distinct_count / non_null_count * 100) if non_null_count > 0 else 0
+                integrity_pct = round(integrity_pct, 2)
+            
             results.append({
                 "table": table,
-                "column": col,
-                "completeness_%": round(completeness_pct, 2)
+                "column": col,  # Use original column name
+                "completeness_%": round(completeness_pct, 2),
+                "integrity_%": integrity_pct
             })
         return pd.DataFrame(results)
 
-# Styling function for conditional row background coloring
+# Styling function for conditional row background coloring based on completeness_%
 def style_completeness_row(row):
     if 80 <= row['completeness_%'] < 90:
         return [f'background-color: orange' for _ in row]
@@ -137,22 +183,21 @@ def style_completeness_row(row):
     else:
         return ['' for _ in row]  # No background color for values >= 90
 
-st.title("MFIS Data Completeness")
+st.title("MFIS Data Data Quality Assessment")
 
 selected_mfi = st.selectbox("Select MFI Schema", mfis_schemas)
 selected_table = st.selectbox("Select Table", list(table_columns.keys()))
 
-if st.button("Calculate Completeness"):
-    with st.spinner("Calculating completeness..."):
-        df = calculate_completeness(selected_mfi, selected_table, table_columns[selected_table])
-    st.success(f"Completeness calculated for {selected_table} in {selected_mfi}")
+if st.button("Submit"):
+    with st.spinner("Calculating completeness and integrity..."):
+        df = calculate_metrics(selected_mfi, selected_table, table_columns[selected_table])
+    st.success(f"Metrics calculated for {selected_table} in {selected_mfi}")
     
-    # Apply styling to the entire row and format completeness_% to 2 decimal places
-    styled_df = df.style.apply(style_completeness_row, axis=1).format({'completeness_%': '{:.2f}'})
+    # Apply styling to the entire row and format completeness_% and integrity_% to 2 decimal places
+    styled_df = df.style.apply(style_completeness_row, axis=1).format(
+        {'completeness_%': '{:.2f}', 'integrity_%': lambda x: '{:.2f}'.format(x) if isinstance(x, (int, float)) else x}
+    )
     st.dataframe(styled_df)
 
     csv = df.to_csv(index=False)
-    st.download_button(label="Download CSV", data=csv, file_name=f"{selected_mfi}_{selected_table}_completeness.csv", mime='text/csv')
-
-
-
+    st.download_button(label="Download CSV", data=csv, file_name=f"{selected_mfi}_{selected_table}_metrics.csv", mime='text/csv')
