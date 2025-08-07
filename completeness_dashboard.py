@@ -213,7 +213,7 @@ def style_completeness_row(row):
     else:
         return ['' for _ in row]  # No background color for values >= 90
 
-st.title("MFIS Data Data Quality Assessment")
+st.title("MFIS Data Quality Assessment")
 
 # MFI schema selection
 selected_mfi = st.selectbox("Select MFI Schema", mfis_schemas)
@@ -245,3 +245,4 @@ if st.button("Submit"):
     filename = f"{selected_source}_{selected_table}_metrics.csv" if source_db else f"{selected_mfi}_{selected_table}_metrics.csv"
     csv = df.to_csv(index=False)
     st.download_button(label="Download CSV", data=csv, file_name=filename, mime='text/csv')
+
