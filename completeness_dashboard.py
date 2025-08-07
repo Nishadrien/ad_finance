@@ -241,7 +241,7 @@ if st.button("Submit"):
     
     # Apply styling to the completeness_% column and format completeness_% and integrity_% to 2 decimal places
     styled_df = df.style.apply(style_completeness_cell, axis=1).format(
-        {'completeness_%': '{:.2f}', 'integrity_%': lambda x: '{:.2f}'.format(x) if isinstance(x, (int, float)) else x}
+        {'completeness_%': '{:.0f}%', 'integrity_%': lambda x: '{:.0f}%'.format(x) if isinstance(x, (int, float)) else x}
     )
     st.dataframe(styled_df)
 
@@ -249,3 +249,4 @@ if st.button("Submit"):
     filename = f"{selected_source}_{selected_table}_metrics.csv" if source_db else f"{selected_mfi}_{selected_table}_metrics.csv"
     csv = df.to_csv(index=False)
     st.download_button(label="Download CSV", data=csv, file_name=filename, mime='text/csv')
+
