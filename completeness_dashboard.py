@@ -137,7 +137,7 @@ def style_completeness_row(row):
     else:
         return ['' for _ in row]  # No background color for values >= 90
 
-st.title("AD Finance Data Completeness Dashboard")
+st.title("MFIS Data Completeness")
 
 selected_mfi = st.selectbox("Select MFI Schema", mfis_schemas)
 selected_table = st.selectbox("Select Table", list(table_columns.keys()))
@@ -153,3 +153,4 @@ if st.button("Calculate Completeness"):
 
     csv = df.to_csv(index=False)
     st.download_button(label="Download CSV", data=csv, file_name=f"{selected_mfi}_{selected_table}_completeness.csv", mime='text/csv')
+
