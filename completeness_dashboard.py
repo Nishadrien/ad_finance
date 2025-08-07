@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
-from sqlalchemy import create_engine,text
+from sqlalchemy import create_engine
 from urllib.parse import quote_plus
+from sqlalchemy import text
 
 
 # DB connection info
@@ -152,3 +153,4 @@ if st.button("Calculate Completeness"):
 
     csv = df.to_csv(index=False)
     st.download_button(label="Download CSV", data=csv, file_name=f"{selected_mfi}_{selected_table}_completeness.csv", mime='text/csv')
+
